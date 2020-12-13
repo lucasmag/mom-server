@@ -121,7 +121,10 @@ function getDate(){
 io.on('connection', function (socket) { 
   socket.on('sendMessage', (data) => {
     console.log(data);
-    let handle = {"time": getDate(), "message": data["message"], "queue": data["user"], "user": data["user"]}
+    let handle = {
+      ...data,
+      "time": getDate(),
+    }
 
     amqp.connect('amqp://localhost', function(error0, connection) {
       if (error0) {
@@ -131,44 +134,21 @@ io.on('connection', function (socket) {
         if (error1) {
           throw error1;
         }
-        var queue = data["queue"];
-  
-        channel.assertQueue(queue, {
-          durable: false
-        });
-  
-        let toSend = Buffer.from(JSON.stringify(handle))
+        if(!data.isTopic) {    
+          channel.assertQueue(data.sentTo, {
+            durable: false
+          });
+    
+          let toSend = Buffer.from(JSON.stringify(handle))
+          channel.sendToQueue(data.sentTo, toSend);
 
-        channel.sendToQueue(queue, toSend);
-      });
-
-    });
-  });
-
-  socket.on('sendMessage', (data) => {
-    console.log(data);
-    let handle = {"time": getDate(), "message": data["message"], "queue": data["user"], "user": data["user"]}
-
-    amqp.connect('amqp://localhost', function(error0, connection) {
-      if (error0) {
-        throw error0;
-      }
-      connection.createChannel(function(error1, channel) {
-        if (error1) {
-          throw error1;
+        } else {
+          channel.assertExchange('topic', 'direct', {
+            durable: false
+          });
+          channel.publish('topic', data.sentTo, Buffer.from(JSON.stringify(handle)));
         }
-        var queue = data["queue"];
-  
-        channel.assertQueue(queue, {
-          durable: false
-        });
-  
-        let toSend = Buffer.from(JSON.stringify(handle))
-
-        channel.sendToQueue(queue, toSend);
       });
-
     });
   });
-
 })
