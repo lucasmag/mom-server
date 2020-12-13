@@ -21,18 +21,21 @@ ipcMain.on('create-queue', (event, queueName) => {
   let qtt = 0
   amqp.connect('amqp://localhost', function(error0, connection) {
     if (error0) {
-      throw error0;
-    }
-    connection.createChannel(function(error1, channel) {
-      if (error1) {
-        throw error1;
-      }
+      console.log("rapaaaaaaz da pra conectar nao");;
+      
+    } else {
 
-      channel.assertQueue(queueName, {durable: false}, function (arr, ok) {
-        console.log(ok);
-        let qtt = ok["messageCount"]
+      connection.createChannel(function(error1, channel) {
+        if (error1) {
+          throw error1;
+        }
+  
+        channel.assertQueue(queueName, {durable: false}, function (arr, ok) {
+          console.log(ok);
+          let qtt = ok["messageCount"]
+        });
       });
-    });
+    }
 
   })
 

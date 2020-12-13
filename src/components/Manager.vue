@@ -151,6 +151,9 @@ export default {
       updateAll: function () {
         // let result = ipc.sendSync("update-all", this.queueList);
         // this.queueList = result
+      },
+      getTopics() {
+        console.log("topics")
       }
   },
   
