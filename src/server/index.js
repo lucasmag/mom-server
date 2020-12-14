@@ -1,23 +1,13 @@
 const { ipcMain } = require('electron')
 const io = require('socket.io')(4113, { serveClient: false});
-
-
-
+import axios from 'axios'
 var amqp = require('amqplib/callback_api');
 
-var exec = require("child_process").exec
 console.log("Initializing client...")
-/*
-messages = {
-  ["lucas", "mat"]: [
-      {"username": "lucas", "message": "eae mano"},
-      {"username": "mat", "message": "tmj"},
-    ]
-}
+const QUEUE_URL = "http://localhost:15672/api/queues"
+const AUTH = {auth: {'username': 'guest', 'password': 'guest'}}
 
-*/
-
-ipcMain.on('create-queue', (event, queueName) => {
+ipcMain.on('create', (event, data) => {
   let qtt = 0
   amqp.connect('amqp://localhost', function(error0, connection) {
     if (error0) {
@@ -29,11 +19,19 @@ ipcMain.on('create-queue', (event, queueName) => {
         if (error1) {
           throw error1;
         }
-  
-        channel.assertQueue(queueName, {durable: false}, function (arr, ok) {
-          console.log(ok);
-          let qtt = ok["messageCount"]
-        });
+        let qtt = 0
+
+        if(!data.isTopic) {
+          channel.assertQueue(data.name, {durable: false}, function (arr, ok) {
+            console.log(ok);
+            qtt = ok["messageCount"]
+          });
+        } else {
+          channel.assertExchange(data.name, 'fanout', {
+            durable: false
+          });
+        }
+
       });
     }
 
@@ -42,9 +40,13 @@ ipcMain.on('create-queue', (event, queueName) => {
   event.returnValue = qtt
 })
 
-ipcMain.on('delete-queue', (event, queue) => {
+ipcMain.on('delete', (event, data) => {
 
     amqp.connect('amqp://localhost', function(error0, connection) {
+      if (error0) {
+        console.log("rapaaaaaaz da pra conectar nao");;
+        
+      }
       connection.on( 'error', function(err) {
         //do something
         console.log('An error occurred' + err);
@@ -55,60 +57,17 @@ ipcMain.on('delete-queue', (event, queue) => {
         throw error1;
       }
 
-    channel.checkQueue(queue, function(err, ok) {
-      console.log(err, ok);
-    });
-
-    channel.deleteQueue(queue)
+    if(!data.isTopic) {
+      channel.deleteQueue(data.name)
+    } else {
+      channel.deleteExchange(data.name)
+    }
 
     });
   });
       
 
   event.returnValue = 'fila deletada!'
-})
-
-// ipcMain.on('update-all', (event, allQueues) => {
-//   amqp.connect('amqp://localhost', function(error0, connection) {
-//     if (error0) {
-//       throw error0;
-//     }
-//     connection.createChannel(function(error1, channel) {
-//       if (error1) {
-//         throw error1;
-//       }
-
-//       for (const [ queue, qtt ] of Object.entries(allQueues)) {
-//         channel.assertQueue(queue, {durable: false}, function (arr, ok) {
-//           event.returnValue = ok["messageCount"]
-//         });
-//       }
-
-//       // //return { queue: 'teste', messageCount: 0, consumerCount: 0 }
-//       // channel.assertQueue(queue, {durable: false}, function (arr, ok) {
-//       //   console.log(ok);
-//       // });
-
-//       channel.deleteQueue(queue)
-//     });
-//   });
-//   event.returnValue = 'fila deletada!'
-// })
-
-
-ipcMain.on('create-client', (event, arg) => {
-  exec("yarn electron:serve", (error, stdout, stderr) => {
-    if (error) {
-        console.log(`error: ${error.message}`);
-        return;
-    }
-    if (stderr) {
-        console.log(`stderr: ${stderr}`);
-        return;
-    }
-    console.log(`stdout: ${stdout}`);
-});
-  
 })
 
 // Sockets
@@ -121,7 +80,7 @@ function getDate(){
   return datestring
 }
 
-io.on('connection', function (socket) { 
+io.on('connection', function (socket) {
   socket.on('sendMessage', (data) => {
     console.log(data);
     let handle = {
@@ -146,12 +105,27 @@ io.on('connection', function (socket) {
           channel.sendToQueue(data.sentTo, toSend);
 
         } else {
-          channel.assertExchange('topic', 'direct', {
+          channel.assertExchange(data.sentTo, 'fanout', {
             durable: false
           });
-          channel.publish('topic', data.sentTo, Buffer.from(JSON.stringify(handle)));
+          channel.publish(data.sentTo, '', Buffer.from(JSON.stringify(handle)));
         }
       });
+
+      setTimeout(function() { 
+        connection.close(); 
+        }, 500);
+
     });
   });
+
+
+  socket.on('userExists', (user, callback) => {    
+    axios
+    .get(QUEUE_URL, AUTH)
+    .then((response) => {
+      let queues = response.data.map(element => element.name)
+      queues.includes(user) ? callback(true) : callback(false)
+    })    
+  }) 
 })
